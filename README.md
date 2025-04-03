@@ -1,115 +1,169 @@
 #include <iostream>
 #include <string>
+#include <cctype>
+
 using namespace std;
 
-// 1. Функция проверки цифры
-bool is_digit(char c) {
-    return c >= '0' && c <= '9';
+// Глобальные переменные для состояния парсера
+string input;
+size_t pos = 0;
+
+// Вспомогательные функции
+void next_char() {
+    if (pos < input.length() - 1) {
+        pos++;
+    } else {
+        pos = input.length();
+    }
 }
 
-// 2. Функция пропуска пробелов
-void skip_spaces(const string& s, int& pos) {
-    while (pos < s.size() && s[pos] == ' ') {
-        pos++;
+void skip_whitespace() {
+    while (pos < input.length() && isspace(input[pos])) {
+        next_char();
     }
 }
 
-// 3. Функция проверки числа
-bool check_number(const string& s, int& pos) {
-    // Проверяем знак числа
-    if (s[pos] == '+' || s[pos] == '-') {
-        pos++;
+char current_char() {
+    return pos < input.length() ? input[pos] : '\0';
+}
+
+bool accept(char expected) {
+    skip_whitespace();
+    if (current_char() == expected) {
+        next_char();
+        return true;
     }
-    
-    // Проверяем цифры целой части
-    bool has_digits = false;
-    while (pos < s.size() && is_digit(s[pos])) {
-        pos++;
-        has_digits = true;
+    return false;
+}
+
+// Функции для разбора по правилам
+bool parse_digit() {
+    if (isdigit(current_char())) {
+        next_char();
+        return true;
     }
+    return false;
+}
+
+bool parse_unsigned() {
+    if (!parse_digit()) return false;
+    while (parse_digit());
+    return true;
+}
+
+bool parse_sign() {
+    char c = current_char();
+    if (c == '+' || c == '-') {
+        next_char();
+    }
+    return true;
+}
+
+bool parse_real() {
+    if (accept('.')) {
+        return parse_unsigned();
+    }
+
+    parse_sign();
+
+    if (!parse_unsigned()) return false;
+
+    if (accept('.')) {
+        return parse_unsigned();
+    }
+
+    return true;
+}
+
+// Реализация правила для переменной с картинки
+bool parse_variable() {
+    // (переменная) ::= (имя) {[ (выражение) {, (выражение)} ]}
+    // Упрощенная реализация для примера
     
-    // Если нет ни одной цифры - ошибка
-    if (!has_digits) return false;
-    
-    // Проверяем дробную часть (если есть)
-    if (pos < s.size() && s[pos] == '.') {
-        pos++;
-        // После точки должна быть хотя бы одна цифра
-        if (pos >= s.size() || !is_digit(s[pos])) return false;
-        while (pos < s.size() && is_digit(s[pos])) {
-            pos++;
+    // Проверяем имя (упрощенно - буквы)
+    if (!isalpha(current_char())) return false;
+    while (isalnum(current_char())) next_char();
+
+    while (true) {
+        if (accept('[')) {
+            // Разбор выражений в квадратных скобках
+            do {
+                if (!parse_horner_scheme()) return false;
+            } while (accept(','));
+            
+            if (!accept(']')) return false;
+        }
+        else if (accept('.')) {
+            // Обращение к полю (упрощенно)
+            if (!isalpha(current_char())) return false;
+            while (isalnum(current_char())) next_char();
+        }
+        else if (accept('-') && accept('>')) {
+            // Стрелка (->)
+            if (!isalpha(current_char())) return false;
+            while (isalnum(current_char())) next_char();
+        }
+        else {
+            break;
         }
     }
     
     return true;
 }
 
-// 4. Основная функция проверки схемы Горнера
-bool check_horner(const string& s, int& pos) {
-    // Пропускаем пробелы в начале
-    skip_spaces(s, pos);
-    
-    // Проверяем первое число
-    if (!check_number(s, pos)) {
-        return false;
+bool parse_horner_scheme() {
+    if (!parse_real()) {
+        // Если не число, пробуем разобрать как переменную
+        return parse_variable();
     }
-    
-    // Пропускаем пробелы после числа
-    skip_spaces(s, pos);
-    
-    // Если строка закончилась - это корректная схема
-    if (pos >= s.size()) {
-        return true;
-    }
-    
-    // Проверяем наличие "+x("
-    if (s[pos] != '+') return false;
-    pos++;
-    if (pos >= s.size() || s[pos] != 'x') return false;
-    pos++;
-    if (pos >= s.size() || s[pos] != '(') return false;
-    pos++;
-    
-    // Рекурсивно проверяем внутреннюю часть
-    if (!check_horner(s, pos)) {
-        return false;
-    }
-    
-    // Проверяем закрывающую скобку
-    if (pos >= s.size() || s[pos] != ')') return false;
-    pos++;
-    
+
+    skip_whitespace();
+    if (current_char() == '\0') return true;
+
+    if (!accept('+')) return false;
+    if (!accept('x')) return false;
+    if (!accept('(')) return false;
+    if (!parse_horner_scheme()) return false;
+    if (!accept(')')) return false;
+
     return true;
 }
 
-// 5. Функция для проверки всей строки
-bool is_horner_scheme(const string& s) {
-    int pos = 0;
-    bool is_valid = check_horner(s, pos);
-    
-    // Проверяем, что дошли до конца строки
-    skip_spaces(s, pos);
-    return is_valid && (pos == s.size());
+bool is_horner_scheme(const string& str) {
+    input = str;
+    pos = 0;
+    return parse_horner_scheme() && pos == input.length();
 }
 
-// 6. Главная функция программы
 int main() {
-    cout << "Проверка схемы Горнера" << endl;
-    cout << "Примеры правильных схем:" << endl;
-    cout << "1 + x(2)" << endl;
-    cout << "3.5 + x(0 + x(1.2))" << endl;
-    cout << "--------------------------------" << endl;
-    
-    string input;
-    cout << "Введите выражение для проверки: ";
-    getline(cin, input);
-    
-    // 7. Проверка введенной строки
-    if (is_horner_scheme(input)) {
-        cout << ">>> Это корректная схема Горнера!" << endl;
-    } else {
-        cout << ">>> Это НЕ схема Горнера!" << endl;
+    // Тесты для схемы Горнера
+    string tests[] = {
+        "1",                        // true
+        "1 + x(2)",                 // true
+        "1 + x(2 + x(3))",          // true
+        "a + x(b + x(c))",          // true (с переменными)
+        "arr[1] + x(mat[2][3])",    // true (с массивами)
+        "1 + x(2 + x)",             // false
+        "1 + 2",                    // false
+        "1 + x(2 + y(3))",          // false
+        "1 + x(2 + x(3)",           // false
+        "x + 1"                     // false
+    };
+
+    cout << "Тестирование парсера схемы Горнера:\n";
+    for (const auto& test : tests) {
+        cout << "'" << test << "' -> " 
+             << (is_horner_scheme(test) ? "Да" : "Нет") << endl;
     }
-    
+
+    // Интерактивный режим
+    cout << "\nВведите выражение для проверки (или 'exit' для выхода):\n";
+    string line;
+    while (getline(cin, line)) {
+        if (line == "exit") break;
+        cout << "'" << line << "' -> " 
+             << (is_horner_scheme(line) ? "Схема Горнера" : "Не схема Горнера") << endl;
+    }
+
     return 0;
 }
